@@ -2,17 +2,16 @@
 
 namespace Administration\Controllers;
 
-use Administration\Models\Menu;
-use Administration\Models\Permission;
 use Administration\Models\Role;
 use Administration\Models\User;
+use Administration\Services\PasswordPolicyService;
 use App\Http\Controllers\Controller;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Validator;
-use Administration\Services\PasswordPolicyService;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -23,18 +22,26 @@ class UserController extends Controller
      */
     public function index()
     {
+        $pages = [
+            'traffic-trends' => 'Traffic trends',
+            'outlier-detections' => 'Outlier detections',
+            'country-codes.index' => 'Country codes',
+            'carriers.index' => 'Carriers',
+            'local-ips.index' => 'Local IPs',
+            'sip-monitoring.index' => 'SIP Monitoring',
+            'trace.index' => 'Trace',
+            'call-monitoring.index' => 'Call Monitoring',
+            'traffic-report.index' => 'Traffic report',
+            'country-wise-traffic.index' => 'Country wise traffic',
+            'carrier-wise-traffic.index' => 'Carrier wise traffic',
+            'release-cause.index' => 'Release Cause',
+            'acd.index' => 'Average Call Duration',
+            'asr.index' => 'Answer-Seizure Ratio',
+            'fraud-investigation.index' => 'Fraud investigation',
+            'users.index' => 'Users'
+        ];
         $roles = Role::all()->pluck('name', 'name');
-        $type = env('APP_TYPE');
-        $menu = Menu::query();
-        if ($type=='ALL') {
-            $menu->where('type','=','SMSFW')->orWhere('type','=','VOICEFW');
-        }else{
-            $menu->where('type','=',$type);
-        }
-
-        $menu = $menu->where('url','<>',null)->get()->pluck('title','id');
-
-        return view('Administration::users.index',compact('roles','menu'));
+        return view('Administration::users.index', compact('roles', 'pages'));
     }
 
     /**
@@ -56,23 +63,15 @@ class UserController extends Controller
     public function store(Request $request)
     {
 
-        $is_api = $request->is_api == 'on'?1:0;
-        if (User::whereName($request->name)->withTrashed()->count() > 0){
-            return $this->sendError('User name already exists!');
-        }
-
         $exist_user = User::whereEmail($request->email)->withTrashed()->first();
+
         if (!empty($exist_user)) {
-            if (User::whereName($request->name)->count() > 0){
-                return $this->sendError( 'User name already exists!');
-            }
             if ($exist_user->trashed()) {
                 $exist_user->name = $request->name;
-                $exist_user->updated_by = Auth::user()->id;
+                $exist_user->email = $request->email;
                 $exist_user->landing_page = $request->landing_page;
-                $exist_user->is_api = $is_api;
+                $exist_user->updated_by = Auth::user()->id;
                 $exist_user->save();
-                $exist_user->syncRoles($request->role);
                 $exist_user->restore();
 
                 $pc = new PasswordPolicyService($exist_user);
@@ -82,12 +81,13 @@ class UserController extends Controller
             }
             return $this->sendError('Error', 'User already exits!');
         } else {
-            $user = User::create(['name' => $request['name'], 'email' => $request['email'] ,'landing_page' => $request['landing_page'], 'password' => Hash::make($request['password']), 'created_by' => Auth::user()->id, 'is_api' => $is_api]);
+            $send_alerts = !empty($request->send_alerts) ? 1 : 0;
+            $user = User::create(['name' => $request['name'], 'landing_page' => $request['landing_page'], 'email' => $request['email'], 'password' => Hash::make($request['password']), 'created_by' => Auth::user()->id, 'send_alerts' => $send_alerts]);
+            $user->syncRoles($request->role);
 
             $pc = new PasswordPolicyService($user);
             $pc->passwordChangeProcess($request['password']);
 
-            $user->syncRoles($request->role);
             return $this->sendResponse($exist_user, 'User successfully added!');
         }
     }
@@ -111,9 +111,8 @@ class UserController extends Controller
      */
     public function edit(User $user)
     {
-        $role = Role::find(Auth::user()->roles[0]->id);
-        $permissions = $role->permissions->pluck('name');
-        return view('Administration::users.profile', compact('user', 'permissions'));
+        //
+        return view('Administration::users.change-password', compact('user'));
     }
 
     /**
@@ -125,28 +124,25 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
-        $is_api = $request->is_api == 'on'?1:0;
-        if (User::whereName($request->name)->where('id','!=',$user->id)->withTrashed()->count() > 0){
-            return $this->sendError('User name already exists!');
-        }
 
         if ($user->email != $request->email) {
-            $existUser = User::whereEmail($request->email)
-                ->withTrashed()
-                ->exists();
+            $existUser = User::whereEmail($request->email)->withTrashed()->exists();
             if ($existUser) {
                 return $this->sendError('User already exits!');
             }
         }
+        $send_alerts = !empty($request->send_alerts) ? 1 : 0;
 
-        $user->updated_by = $request->updated_by;
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->send_alerts = $send_alerts;
         $user->landing_page = $request->landing_page;
-        $user->is_api = $is_api;
+        $user->updated_by = $request->updated_by;
         $user->save();
+
         $user->syncRoles($request->role);
 
         return $this->sendResponse($user, 'User Updated Successfully');
-
     }
 
     /**
@@ -171,11 +167,10 @@ class UserController extends Controller
         $length = $request->length;
         $order_by_str = $order_by[0]['dir'];
 
-        $columns = ['id', 'name', 'email', 'id'];
+        $columns = ['id', 'name', 'email', 'role', 'landing_page', 'id'];
         $order_column = $columns[$order_by[0]['column']];
 
         $users = User::tableData($order_column, $order_by_str, $start, $length);
-
         if (is_null($search) || empty($search)) {
             $users = $users->get();
             $user_count = User::all()->count();
@@ -189,44 +184,40 @@ class UserController extends Controller
         $edit_btn = null;
         $delete_btn = null;
         $reset_btn = null;
-        $can_reset = ($user->can('reset password')) ? 1 : 0;
-        $can_edit = ($user->can('users edit')) ? 1 : 0;
-        $can_delete = ($user->can('users delete')) ? 1 : 0;
-        $reset_attempts = ($user->can('reset attempts')) ? 1 : 0;
-        foreach ($users as $key => $user) {
-            $attempts_btn = null;
 
-            $menu_title = (!empty($user->landing_page)) ?Menu::where('id','=',$user->landing_page)->first()->title:'-';
-            
+        $can_reset = ($user->hasAnyAccess('reset password')) ? 1 : 0;
+        $can_edit = ($user->hasAnyAccess('users edit')) ? 1 : 0;
+        $can_delete = ($user->hasAnyAccess('users delete')) ? 1 : 0;
+        $reset_attempts = ($user->hasAnyAccess('reset attempts')) ? 1 : 0;
+        foreach ($users as $key => $user) {
+            $send_alerts = !empty($user->send_alerts) ? 'On' : 'Off';
+            $attempts_btn = null;
             if ($reset_attempts) {
                 $last_login = new Carbon(($user->last_login) ? $user->last_login : $user->created_at);
                 $disabledUser = Carbon::now()->diffInDays($last_login) >= config('auth.user_expires_days');
-                if ($user->login_attempts>=3 || $disabledUser){
+                if ($user->login_attempts > 3 || $disabledUser){
                     $attempts_btn = "<i title='Unlock user' class='icon-md icon-lock-open mr-3' onclick=\"resetAttempt(this)\" data-id='{$user->id}'></i>";
                 }
             }
-
             if ($can_reset) {
-                $reset_btn = "<i class='icon-md icon-action-undo  mr-3' onclick=\"reset(this)\" data-id='{$user->id}'></i>";
+                $reset_btn = "<i class='icon-md icon-action-undo mr-3' onclick=\"reset(this)\" data-id='{$user->id}'></i>";
             }
             if ($can_edit) {
-                $edit_btn = "<i class='icon-md icon-pencil mr-3' onclick=\"edit(this)\" data-id='{$user->id}' data-email='{$user->email}' data-name='{$user->name}' data-landing_page='{$user->landing_page}' data-roles='{$user->getRoleNames()}' data-is_api='{$user->is_api}'></i>";
+                $edit_btn = "<i class='icon-md icon-pencil mr-3' onclick=\"edit(this)\" data-id='{$user->id}' data-email='{$user->email}' data-name='{$user->name}' data-landing_page='{$user->landing_page}' data-send_alerts='{$user->send_alerts}' data-roles='{$user->getRoleNames()[0]}'></i>";
             }
             if ($can_delete) {
                 $url = "'users/" . $user->id . "'";
                 $delete_btn = "<i class='icon-md icon-trash mr-3' onclick=\"FormOptions.deleteRecord(" . $user->id . ",$url,'userTable')\"></i>";
             }
-
             $roles = $user->roles;
 
-            $api_user = ($user->is_api)?"<i class='text-success fa fa-check'></i>":"<i class='fa fa-close text-danger'>";
             $data[$i] = array(
                 $user->id,
                 $user->name,
                 $user->email,
                 $user->getRoleNames(),
-                $menu_title,
-                $api_user,
+                $send_alerts,
+                $user->landing_page,
                 $edit_btn . $delete_btn . $reset_btn . $attempts_btn
             );
             $i++;
@@ -248,48 +239,28 @@ class UserController extends Controller
 
     public function resetPassword(Request $request, User $user)
     {
-        if(Carbon::now()->diffInSeconds($user->password_changed_at) <= config('auth.seconds_for_day')){
-            return $this->sendResponse($user, 'It has not been 24 hours since the password was changed');
+        if (Carbon::now()->diffInSeconds($user->password_changed_at) <= config('auth.seconds_for_day')) {
+            return $this->sendError('It has not been 24 hours since the password was changed');
         }
 
         $newPassword = $request->password;
         $user->password = Hash::make($newPassword);
         $user->password_changed_at = Carbon::now()->toDateTimeString();
         $user->last_login = Carbon::now();
+        $user->enabled = 1;
         $user->save();
 
         $pc = new PasswordPolicyService($user);
-        $pc->passwordChangeProcess($request->password);
+        $pc->passwordChangeProcess($newPassword);
 
         return $this->sendResponse($user, 'Password Reset Successfully');
     }
 
-    public function unlock(Request $request, User $user)
-    {
-        $user->login_attempts = 0;
-        $user->last_login = Carbon::now();
-        $user->save();
-        return $this->sendResponse($user, 'User Unlocked Successfully');
-
-    }
-
-    public function recentPasswordValid(Request $request){
-        $password = $request->password;
-        $user = Auth::user();
-        if(isset($request->user_id) && !empty($request->user_id) ){
-            $user = User::find($request->user_id);
-        }
-        $passwordPolicyService = new PasswordPolicyService($user);
-        $is_recently_used = $passwordPolicyService->isRecentlyUsedPassword($password);
-        if(!$is_recently_used){
-            return 'true';
-        }
-        return 'false';
-    }
-
     public function updatePassword(Request $request, User $user)
     {
+
         $validator = Validator::make($request->all(), [
+            'current_password' => 'required|min:8',
             'password' => 'required|confirmed|min:8',
         ]);
 
@@ -300,24 +271,41 @@ class UserController extends Controller
                 ->withInput();
         }
 
-        if(Carbon::now()->diffInSeconds($user->password_changed_at) <= config('auth.seconds_for_day')){
+        if (Carbon::now()->diffInSeconds($user->password_changed_at) <= config('auth.seconds_for_day')) {
             return redirect()
                 ->back()
-                ->with(['alert-type' => 'error', 'message' => 'It has not been 24 hours since the password was changed']);
+                ->with(['alert-type' => 'error', 'message' => 'It has not been 24 hours since the password was changed'])
+                ->withInput();
         }
 
-        $newPassword = $request->password;
-        $user->password = Hash::make($newPassword);
-        $user->password_changed_at = Carbon::now()->toDateTimeString();
+        if (Hash::check($request->current_password, $user->password)) {
+
+            $newPassword = $request->password;
+            $user->password = Hash::make($newPassword);
+            $user->password_changed_at = Carbon::now()->toDateTimeString();
+            $user->save();
+
+            $pc = new PasswordPolicyService($user);
+            $pc->passwordChangeProcess($newPassword);
+
+            return redirect()
+                ->back()
+                ->with(['alert-type' => 'success', 'message' => 'Password Changed Successfully '])
+                ->withInput();
+        } else {
+            return redirect()
+                ->back()
+                ->with(['alert-type' => 'error', 'message' => 'Current Password not match!'])
+                ->withInput();
+        }
+    }
+
+    public function unlock(Request $request, User $user)
+    {
+        $user->login_attempts = 0;
+        $user->last_login = Carbon::now();
+        $user->enabled = 1;
         $user->save();
-
-        $pc = new PasswordPolicyService($user);
-        $pc->passwordChangeProcess($newPassword);
-
-        return redirect()
-            ->back()
-            ->with(['alert-type' => 'success', 'message' => 'Password Changed Successfully '])
-            ->withInput();
-
+        return $this->sendResponse($user, 'User Unlocked Successfully');
     }
 }

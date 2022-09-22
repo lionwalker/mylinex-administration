@@ -1,4 +1,4 @@
-@extends('Administration::layouts.login')
+@extends('layouts.login')
 
 @section('content')
     <div class="container-fluid">

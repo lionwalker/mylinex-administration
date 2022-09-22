@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class AddLoginAttemptsToUsers extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -14,7 +14,7 @@ class AddLoginAttemptsToUsers extends Migration
     public function up()
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->integer('login_attempts')->nullable()->default(0);
+            $table->string('landing_page')->default('home')->after('remember_token');
         });
     }
 
@@ -26,7 +26,7 @@ class AddLoginAttemptsToUsers extends Migration
     public function down()
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['login_attempts']);
+            $table->dropColumn('landing_page');
         });
     }
-}
+};
