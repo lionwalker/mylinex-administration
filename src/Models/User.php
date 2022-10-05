@@ -63,36 +63,30 @@ class User extends Authenticatable
             ->orWhere('email', 'like', "%" . $term . "%");
     }
 
-//    public function hasAnyAccess($permission = [], $isId = false)
-//    {
-////        if (!Auth::user()) {
-////            abort(403);
-////        }
-//
-//        $user = User::with('roles')->find($this->id);
-//        $roles = $user->roles;
-//
-//        $is_super_admin = $user->hasRole('Super Admin') ? true : false;
-//        $is_admin = $user->hasRole('Admin') ? true : false;
-//
-//        if (($is_super_admin || $is_admin)) {
-//            return true;
-//        }
-//
-//        $permissions = is_array($permission) ? $permission : $permission->toArray();
-//
-//
-//        if ($isId) {
-//            $rolePermissions = Role::whereName($roles[0]->name)->first()->permissions->pluck('id')->toArray();
-//        } else {
-//            $rolePermissions = Role::whereName($roles[0]->name)->first()->permissions->pluck('name')->toArray();
-//        }
-////dd($permission->toArray());
-////dd(array_intersect($permission->toArray(), $rolePermissions));
-////dd($rolePermissions);
-//        $intersects = array_intersect($permissions, $rolePermissions);
-//        return !empty($intersects) ? true : false;
-//    }
+   public function hasAnyAccess($permission = [], $isId = false)
+   {
+
+       $user = User::with('roles')->find($this->id);
+       $roles = $user->roles;
+
+       $is_super_admin = $user->hasRole('Super Admin') ? true : false;
+       $is_admin = $user->hasRole('Admin') ? true : false;
+
+       if (($is_super_admin || $is_admin)) {
+           return true;
+       }
+
+       $permissions = is_array($permission) ? $permission : $permission->toArray();
+
+
+       if ($isId) {
+           $rolePermissions = Role::whereName($roles[0]->name)->first()->permissions->pluck('id')->toArray();
+       } else {
+           $rolePermissions = Role::whereName($roles[0]->name)->first()->permissions->pluck('name')->toArray();
+       }
+       $intersects = array_intersect($permissions, $rolePermissions);
+       return !empty($intersects) ? true : false;
+   }
 
     public function generateMenu(){
         $user = $this;
