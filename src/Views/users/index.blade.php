@@ -21,8 +21,6 @@
                                     <th>User Name</th>
                                     <th>Email</th>
                                     <th>Role</th>
-                                    <th>Landing Page</th>
-                                    <th>API User</th>
                                     <th>Action</th>
                                 </tr>
                                 </thead>
