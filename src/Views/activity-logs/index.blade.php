@@ -23,8 +23,8 @@
                                     <th>Subject type</th>
                                     <th>Causer</th>
                                     <th>Causer type</th>
-                                    <th>Properties</th>
                                     <th>Created at</th>
+                                    <th>Properties</th>
                                 </tr>
                                 </thead>
                             </table>
