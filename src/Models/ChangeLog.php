@@ -11,7 +11,7 @@ use Administration\Traits\ActivityLogOptionsTrait;
 class ChangeLog extends Model
 {
     //
-    use LogsActivity, SoftDeletes, ActivityLogOptionsTrait, ActivityLogOptionsTrait;
+    use LogsActivity, SoftDeletes, ActivityLogOptionsTrait;
     protected static $logName = 'change_log';
     protected static $logAttributes = ['*'];
     protected $table = 'doc_change_logs';
