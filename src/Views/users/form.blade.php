@@ -33,7 +33,7 @@
                     <label>Landing Page</label>
                 </div>
                 <div class="col-md-10">
-                    {!! Form::select('landing_page', $menu , null , ['class' => 'form-control landing_page']) !!}
+                    {!! Form::select('landing_page', $landing_page , null , ['class' => 'form-control landing_page']) !!}
                 </div>
             </div>
         @endcan

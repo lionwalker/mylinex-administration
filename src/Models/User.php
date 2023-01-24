@@ -55,12 +55,20 @@ class User extends Authenticatable
             ->limit($length);
     }
 
+    public function menu()
+    {
+        return $this->belongsTo('Administration\Models\Menu', 'landing_page');
+    }
+
     public function scopeSearchData($query, $term)
     {
         return $query
             ->Where('id', 'like', "%" . $term . "%")
             ->orWhere('name', 'like', "%" . $term . "%")
-            ->orWhere('email', 'like', "%" . $term . "%");
+            ->orWhere('email', 'like', "%" . $term . "%")
+            ->orWhereHas('menu', function ($query) use ($term) {
+                $query->where('title', 'like', "%$term%");
+            });
     }
 
 //    public function hasAnyAccess($permission = [], $isId = false)
